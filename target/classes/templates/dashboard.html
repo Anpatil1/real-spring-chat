@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="_csrf" th:content="${_csrf.token}"/>
+    <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <title>ANP Chat</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .sidebar {
+            width: 25rem;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #f0f2f5;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+        }
+
+        .sidebar.hidden {
+            transform: translateX(-100%);
+        }
+
+        .menu-item a {
+            transition: background-color 0.3s;
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .menu-item a:hover,
+        .menu-item a.active {
+            background-color: #e9edef;
+        }
+
+        .menu-icon {
+            font-size: 1.25rem;
+            color: #54656f;
+        }
+
+        .sidebar-content {
+            margin-top: 1rem;
+            display: none;
+            background-color: #ffffff;
+            border-right: 1px solid #d1d7db;
+        }
+
+        .sidebar-content.active {
+            display: block;
+        }
+
+        /* Toggler Button */
+        #sidebarToggler {
+            z-index: 999;
+            cursor: pointer;
+            border: none;
+            outline: none;
+            border-radius: 50%;
+            transition: background-color 0.3s ease;
+        }
+
+        #sidebarToggler:hover {
+            background-color: #008f72;
+        }
+
+        .search-bar input {
+            background-color: #f0f2f5;
+            color: #111b21;
+        }
+        .scrollbar-hidden {
+            overflow: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #cccccc #f0f2f5;
+        }
+        .scrollbar-hidden::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scrollbar-hidden::-webkit-scrollbar-thumb {
+            background-color: #cccccc;
+            border-radius: 3px;
+        }
+        .chat-messages {
+            display: flex;
+            flex-direction: column;
+            background-image: url('https://www.toptal.com/designers/subtlepatterns/patterns/symphony.png');
+            background-repeat: repeat;
+            background-size: 150px;
+            padding: 1rem;
+            overflow-y: auto;
+            max-height: 100vh;
+        }
+
+        .message {
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+            max-width: 70%;
+        }
+
+        .message.sent {
+            align-self: flex-end;
+            background-color: #dcf8c6;
+        }
+
+        .message.received {
+            align-self: flex-start;
+            background-color: #ffffff;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                position: fixed;
+                z-index: 10;
+            }
+            main {
+                margin-left: 0 !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex h-screen">
+<form id="logout-form" th:action="@{/logout}" method="post" style="display: none;">
+    <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}" />
+</form>
+
+<div class="flex w-full">
+    <!-- Toggler Button -->
+    <button id="sidebarToggler" class="fixed top-4 left-4 z-50 bg-[#00a884] text-white p-2 rounded-full shadow-lg">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <aside class="sidebar shadow-lg fixed">
+        <div class="flex flex-col items-center p-4 bg-[#00a884]">
+            <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-2">
+                <img th:src="@{/assets/logo.png}" alt="Custom Logo" class="w-full h-full object-contain rounded-full">
+            </div>
+            <h2 class="text-2xl font-semibold text-white mb-4">QuikChat</h2>
+            <ul class="flex flex-row space-x-6 w-full justify-center">
+                <li class="menu-item">
+                    <a href="#" id="showFriendList" data-title="Friend List" class="text-lg">
+                        <i class="fas fa-users menu-icon"></i>
+                    </a>
+                </li>
+                <li class="menu-item relative">
+                    <a href="#" id="showFriendRequests" data-title="Friend Requests" class="text-lg flex items-center">
+                        <i class="fas fa-user-friends menu-icon text-xl"></i>
+                        <span id="notification-badge" class="absolute top-[-0.5rem] right-[-0.5rem] bg-red-600 text-white text-xs font-semibold rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" id="showAddFriend" data-title="Add Friend" class="text-lg">
+                        <i class="fas fa-user-plus menu-icon"></i>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" id="showChats" data-title="Chat" class="text-lg active">
+                        <i class="fas fa-comments menu-icon"></i>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="sidebar-content friend-list w-full">
+            <h3 class="text-xl p-4 bg-[#f0f2f5] text-[#111b21]">Friend List</h3>
+            <ul class="w-full max-h-[calc(100vh-12rem)] pt-2 overflow-y-auto scrollbar-hidden">
+                <!-- Friends will be listed here -->
+            </ul>
+        </div>
+        <div class="sidebar-content friend-requests w-full">
+            <h3 class="text-xl p-4 bg-[#f0f2f5] text-[#111b21]">Friend Requests</h3>
+            <ul class="w-full max-h-[calc(100vh-12rem)] pt-2 overflow-y-auto scrollbar-hidden">
+                <!-- Friend requests will be listed here -->
+            </ul>
+        </div>
+        <div class="sidebar-content add-friend w-full">
+            <h3 class="text-xl p-4 bg-[#f0f2f5] text-[#111b21]">Add Friend</h3>
+            <form id="searchForm" class="w-full p-4">
+                <div class="search-bar flex mb-4 w-full">
+                    <input id="friendUsername" type="text" name="query" placeholder="Enter username" class="flex-1 p-2 border border-gray-300 rounded-l-md">
+                    <button id="friendRequestButton" type="submit" class="bg-[#00a884] text-white p-2 rounded-r-md hover:bg-[#008f72]">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+            <div class="search-results-wrapper max-h-[calc(100vh-20rem)] overflow-x-hidden overflow-y-auto scrollbar-hidden">
+                <ul class="search-results w-full pt-2">
+                    <!-- Searched users will be listed here -->
+                </ul>
+            </div>
+        </div>
+        <div class="sidebar-content chat-history w-full active">
+            <h3 class="text-xl p-4 bg-[#f0f2f5] text-[#111b21]">Chat History</h3>
+            <div id="chatHistory" class="w-full max-h-[calc(100vh-12rem)] overflow-x-hidden overflow-y-auto scrollbar-hidden">
+                <!-- Chat items will be appended here by JavaScript -->
+            </div>
+        </div>
+        <div class="flex items-center justify-between mt-auto border-t border-gray-300 pt-4 px-4 bg-white">
+            <div class="text-md text-[#54656f] w-4/5 truncate">
+                Logged in as <span class="font-bold text-lg text-[#111b21]" id="currentUser" th:text="${username}" th:title="${username}"></span>
+            </div>
+            <div class="relative">
+                <button onclick="event.preventDefault(); document.getElementById('logout-form').submit();" class="text-[#54656f] hover:text-[#111b21] transition group">
+                    <i class="fas fa-sign-out-alt text-xl"></i>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+
+    <main class="flex-1 ml-[25rem] flex flex-col">
+        <div class="flex-1 p-6 flex flex-col">
+            <div class="bg-white shadow-xl rounded-lg flex flex-col h-[calc(100vh-3rem)]">
+                <div class="chat-details-header flex justify-between items-center p-4 bg-[#f0f2f5] rounded-t-lg">
+                    <h2 class="text-2xl font-semibold text-[#111b21]">Welcome to QuikChat </h2>
+                </div>
+                <div class="chat-messages flex-1 overflow-y-auto scrollbar-hidden p-4 flex flex-col">
+                    <!-- Initial welcome message -->
+                    <div class="text-center mb-8">
+                        <div class="w-32 h-32 bg-white rounded-full flex items-center justify-center mb-4 mx-auto">
+                            <img th:src="@{/assets/logo.png}" alt="Custom Logo" class="w-full h-full object-contain rounded-full">
+                        </div>
+                        <h1 class="text-4xl font-bold text-[#111b21] mb-4">QuikChat Web</h1>
+                        <p class="text-lg text-[#667781] mb-8">Send and receive messages .</p>
+                        <p class="text-sm text-[#8696a0]">Use QuikChat for  one to one chat.</p>
+                    </div>
+                    <!-- Messages will be dynamically appended here -->
+                </div>
+                <div class="chat-input flex items-center p-4 bg-[#f0f2f5] rounded-b-lg">
+                    <input type="text" placeholder="Type a message..." class="flex-1 p-3 border-none rounded-l-full bg-white focus:outline-none">
+                    <button id="sendButton" type="button" class="bg-[#00a884] text-white p-3 rounded-r-full hover:bg-[#008f72] transition duration-200 ease-in-out">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.1.4/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    const currentUser = {
+        username: /*[[${username}]]*/ 'anonymous',
+        userId: /*[[${userId}]]*/ null
+    };
+    /*]]>*/
+</script>
+<script th:src="@{/js/main.js}"></script>
+</body>

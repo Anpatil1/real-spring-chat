@@ -1,0 +1,126 @@
+package com.anp.spring_chat_app.controller;
+
+import com.anp.spring_chat_app.model.ErrorMessage;
+import com.anp.spring_chat_app.model.MessageData;
+import com.anp.spring_chat_app.model.MessageHistory;
+import com.anp.spring_chat_app.model.ReceivedMessage;
+import com.anp.spring_chat_app.service.ChatService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+
+@Controller
+public class ChatController {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatController.class);
+
+    @Autowired
+    private SimpMessagingTemplate simpMessagingTemplate;
+
+    @Autowired
+    private ChatService chatService;
+
+    @GetMapping("/chatHistory")
+    @ResponseBody
+    public List<MessageHistory> getPendingFriendRequests(@RequestParam("username") String username) {
+        return chatService.getChatHistory(username);
+    }
+
+    @GetMapping("/getChatData")
+    @ResponseBody
+    public List<MessageData> getChatData(@RequestParam("friendId") String friendId) {
+        try {
+            Long id = Long.parseLong(friendId);
+            return chatService.getChatData(id);
+        } catch (NumberFormatException e) {
+            log.error("Invalid friend ID format: {}", friendId, e);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Error: Invalid friend ID format.");
+        } catch (Exception e) {
+            log.error("An unexpected error occurred while fetching chat data for friendId: {}", friendId, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error fetching chat data");
+        }
+    }
+
+    @PostMapping("/startChat")
+    @ResponseBody
+    public MessageHistory startChat(@RequestParam("friendId") String friendId, @RequestParam("username") String username) {
+        try {
+            Long id = Long.parseLong(friendId);
+            return chatService.chatFriend(id, username);
+        } catch (NumberFormatException e) {
+            log.error("Invalid friend ID format.", e);
+            return chatService.errorChatHistoryResponse("Error: Invalid friend ID format. " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            log.error("Error: ", e);
+            return chatService.errorChatHistoryResponse("Error: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("An unexpected error occurred while fetching the chat history.", e);
+            return chatService.errorChatHistoryResponse("Error: An unexpected error occurred while fetching the chat history. " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/sendMessage")
+    @ResponseBody
+    public MessageData sendMessage(
+            @RequestParam("friendId") String friendId,
+            @RequestParam("username") String username,
+            @RequestParam("content") String content
+    ) {
+        try {
+            Long id = Long.parseLong(friendId);
+            return chatService.sendMessage(id, username, content);
+        } catch (NumberFormatException e) {
+            log.error("Invalid friend ID format.", e);
+            return chatService.errorMessageDataResponse("Error: Invalid friend ID format. " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            log.error("Error: ", e);
+            return chatService.errorMessageDataResponse("Error: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("An unexpected error occurred while fetching the chat history.", e);
+            return chatService.errorMessageDataResponse("Error: An unexpected error occurred while fetching the chat history. " + e.getMessage());
+        }
+    }
+
+    @MessageMapping("/sendMessage")
+    public void receivedMessage(@Payload ReceivedMessage request) {
+        try {
+            simpMessagingTemplate.convertAndSendToUser(request.getTo(), "/specific", request);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error processing sent message", e);
+            simpMessagingTemplate.convertAndSendToUser(request.getFrom(), "/specific", new ErrorMessage(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Unexpected error processing sent message", e);
+            simpMessagingTemplate.convertAndSendToUser(request.getFrom(), "/specific", new ErrorMessage("Unexpected error occurred."));
+        }
+    }
+
+    @PostMapping("/removeHistory")
+    @ResponseBody
+    public ResponseEntity<String> removeHistory(@RequestParam("friendId") String friendId, @RequestParam("username") String username) {
+        try {
+            Long id = Long.parseLong(friendId);
+            chatService.removeHistory(id, username);
+            return ResponseEntity.ok().build();
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body("Invalid friendId format");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An unexpected error occurred");
+        }
+    }
+
+}
